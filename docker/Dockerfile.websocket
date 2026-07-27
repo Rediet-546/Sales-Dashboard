@@ -1,0 +1,12 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY apps/websocket-server/package*.json ./
+RUN npm install
+
+COPY apps/websocket-server/ ./
+
+EXPOSE 8080
+
+CMD ["npm", "run", "dev"]

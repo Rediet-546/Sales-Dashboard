@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          String    @default("user")
+  roleId        String?
+  tenantId      String?
+  refreshToken  String?
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  dashboards    Dashboard[]
+  alerts        Alert[]
+  metrics       Metric[]
+}
+
+model Dashboard {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  tenantId    String?
+  isDefault   Boolean   @default(false)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  metrics     Metric[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Metric {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  value         Float
+  unit          String?
+  category      String
+  isActive      Boolean   @default(true)
+  tenantId      String?
+  date          DateTime  @default(now())
+  dashboardId   String
+  dashboard     Dashboard @relation(fields: [dashboardId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  alerts        Alert[]
+  metricData    MetricData[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model MetricData {
+  id        String   @id @default(cuid())
+  metricId  String
+  metric    Metric   @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  value     Float
+  timestamp DateTime @default(now())
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([metricId, timestamp])
+}
+
+model Alert {
+  id            String    @id @default(cuid())
+  name          String
+  condition     String
+  threshold     Float
+  status        String    @default("active")
+  tenantId      String?
+  isActive      Boolean   @default(true)
+  lastTriggered DateTime?
+  metricId      String
+  metric        Metric    @relation(fields: [metricId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Report {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        String
+  data        Json
+  userId      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
