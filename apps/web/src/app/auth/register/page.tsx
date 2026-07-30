@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FiMail, FiLock, FiUser, FiArrowRight } from 'react-icons/fi';
+import { getApiBaseUrl } from '@/lib/utils';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function RegisterPage() {
     setError('');
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
+      const response = await fetch(`${getApiBaseUrl()}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

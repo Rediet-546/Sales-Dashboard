@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
+import { getApiBaseUrl } from '@/lib/utils';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+      const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
