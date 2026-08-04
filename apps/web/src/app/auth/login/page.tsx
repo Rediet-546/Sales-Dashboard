@@ -18,6 +18,9 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
+    console.log(`${getApiBaseUrl()}/auth/login`);
+
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
         method: 'POST',
@@ -26,6 +29,8 @@ export default function LoginPage() {
         },
         body: JSON.stringify({ email, password }),
       });
+
+      console.log(response);
 
       const data = await response.json();
 

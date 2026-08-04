@@ -69,6 +69,24 @@ app.get('/api/health', (req, res) => {
     version: '1.0.0',
   });
 });
+// Add this before your routes
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Sales Dashboard API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      metrics: '/api/metrics',
+      dashboards: '/api/dashboards',
+      alerts: '/api/alerts',
+      reports: '/api/reports',
+      nlp: '/api/nlp',
+      'what-if': '/api/what-if'
+    },
+    docs: 'https://github.com/your-repo/sales-dashboard'
+  });
+});
 
 // Error handling
 app.use(notFoundHandler);

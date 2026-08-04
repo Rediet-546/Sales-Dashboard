@@ -22,6 +22,9 @@ model User {
   dashboards    Dashboard[]
   alerts        Alert[]
   metrics       Metric[]
+  reports       Report[]          // ✅ Has relation
+  nlpQueries    NLPQuery[]
+  whatIfScenarios WhatIfScenario[]
 }
 
 model Dashboard {
@@ -94,6 +97,31 @@ model Report {
   type        String
   data        Json
   userId      String
+  user        User      @relation(fields: [userId], references: [id]) // ✅ Added this!
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model NLPQuery {
+  id          String    @id @default(cuid())
+  query       String
+  response    String
+  confidence  Float     @default(0.0)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model WhatIfScenario {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  change      Float
+  impact      String    // 'positive', 'negative', 'neutral'
+  confidence  Float     @default(0.0)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
