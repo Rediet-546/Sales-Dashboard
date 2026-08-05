@@ -1,361 +1,305 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Area,
-  AreaChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { FiActivity, FiDatabase, FiDollarSign, FiPieChart, FiTrendingUp, FiUsers } from 'react-icons/fi';
+  FiTrendingUp,
+  FiUsers,
+  FiDollarSign,
+  FiShoppingBag,
+  FiUser,
+  FiUserCheck,
+  FiAward,
+  FiClock,
+  FiBarChart2,
+} from 'react-icons/fi';
 import KpiCards from '@/components/charts/KpiCards';
+import RealTimeChart from '@/components/charts/RealTimeChart';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  buildDashboardView,
-  DashboardMetric,
-  DashboardViewData,
-  seedMetrics,
-} from '@/lib/dashboard-seed-data';
 
-const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6'];
+interface DashboardData {
+  metrics: any[];
+  salesRecords: any[];
+  user: any;
+  team: any[];
+  activities: any[];
+  totalRevenue: number;
+  totalSales: number;
+  winRate: number;
+  salesPipeline: number;
+}
 
 export default function DashboardPage() {
-  const [dashboard, setDashboard] = useState<DashboardViewData>(buildDashboardView(seedMetrics));
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sourceLabel, setSourceLabel] = useState<'API seed data' | 'Local seed data'>('Local seed data');
+  const [userRole, setUserRole] = useState('user');
 
   useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setUserRole(user.role || 'user');
     fetchDashboardData();
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '');
       const token = localStorage.getItem('token');
+      
+      // Fetch metrics
+      const metricsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/metrics/user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const metricsData = await metricsRes.json();
 
-      if (apiUrl && token) {
-        const response = await fetch(`${apiUrl}/metrics/user`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+      // Fetch user profile
+      const profileRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const profileData = await profileRes.json();
 
-        const data = await response.json();
-        if (response.ok && Array.isArray(data.metrics) && data.metrics.length > 0) {
-          setDashboard(buildDashboardView(data.metrics as DashboardMetric[]));
-          setSourceLabel('API seed data');
-          return;
-        }
-      }
+      // Fetch team members
+      const teamRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/team`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const teamData = await teamRes.json();
 
-      setDashboard(buildDashboardView(seedMetrics));
-      setSourceLabel('Local seed data');
+      // Fetch sales records
+      const salesRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/sales`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const salesData = await salesRes.json();
+
+      // Fetch activities
+      const activitiesRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/activities`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const activitiesData = await activitiesRes.json();
+
+      const metrics = metricsData.metrics || [];
+      const user = profileData.user || {};
+      const team = teamData.team || [];
+      const salesRecords = salesData.sales || [];
+      const activities = activitiesData.activities || [];
+
+      // Calculate KPIs
+      const totalRevenue = metrics
+        .filter((m: any) => m.category === 'revenue' || m.category === 'sales')
+        .reduce((sum: number, m: any) => sum + m.value, 0);
+
+      const totalSales = salesRecords.filter((r: any) => r.status === 'completed').length;
+      const winRate = salesRecords.length > 0 
+        ? (totalSales / salesRecords.length) * 100 
+        : 0;
+      const salesPipeline = salesRecords
+        .filter((r: any) => r.status === 'pending')
+        .reduce((sum: number, r: any) => sum + r.amount, 0);
+
+      setData({
+        metrics,
+        salesRecords,
+        user,
+        team,
+        activities,
+        totalRevenue,
+        totalSales,
+        winRate,
+        salesPipeline,
+      });
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      setDashboard(buildDashboardView(seedMetrics));
-      setSourceLabel('Local seed data');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (value: number) =>
-    `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-
-  const renderCardFrame = (children: ReactNode, className = '') => (
-    <Card
-      className={`h-full overflow-hidden border-white/60 bg-white/90 shadow-lg shadow-slate-200/60 backdrop-blur ${className}`}
-    >
-      {children}
-    </Card>
-  );
-
-  const renderNoData = () => (
-    <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-      No chart data available
-    </div>
-  );
-
-  const totalValue = dashboard.categoryTotals.reduce((sum, item) => sum + item.value, 0);
-  const largestCategoryShare =
-    dashboard.categoryCounts.length > 0 && dashboard.totalMetrics > 0
-      ? Math.max(...dashboard.categoryCounts.map((item) => item.value)) / dashboard.totalMetrics
-      : 0;
-
-  const kpiCards = [
-    {
-      title: 'Total Revenue',
-      value: formatCurrency(dashboard.totalRevenue),
-      icon: <FiDollarSign className="text-blue-600" />,
-      trend: 'up' as const,
-      trendValue: `${dashboard.revenueGrowth.toFixed(1)}%`,
-    },
-    {
-      title: 'Active Users',
-      value: dashboard.activeUsers.toLocaleString(),
-      icon: <FiUsers className="text-emerald-600" />,
-      trend: 'up' as const,
-      trendValue: 'Seeded users',
-    },
-    {
-      title: 'Average Value',
-      value: dashboard.averageValue.toFixed(2),
-      icon: <FiActivity className="text-violet-600" />,
-      trend: 'neutral' as const,
-      trendValue: 'Across all metrics',
-    },
-    {
-      title: 'Top Metric',
-      value: dashboard.topMetric ? dashboard.topMetric.name : 'N/A',
-      icon: <FiDatabase className="text-orange-600" />,
-      trend: 'up' as const,
-      trendValue: dashboard.topMetric ? formatCurrency(dashboard.topMetric.value) : 'Seed fallback',
-    },
-  ];
-
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600" />
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
+  if (!data) {
+    return <div className="text-center py-12">No data available</div>;
+  }
+
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-6 text-white shadow-2xl shadow-slate-900/20">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      {/* Header with User Info */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+            Welcome back, {data.user.name}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {data.user.role === 'admin' && '🔑 Administrator Access'}
+            {data.user.role === 'sales_manager' && '📊 Sales Manager'}
+            {data.user.role === 'sales_rep' && '💼 Sales Representative'}
+            {data.user.role === 'viewer' && '👀 Viewer'}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <Badge variant="outline" className="px-4 py-2 bg-white">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+              Live Updates
+            </span>
+          </Badge>
+          <Badge variant="outline" className="px-4 py-2 bg-blue-50 text-blue-700">
+            <FiUser className="mr-1" /> {data.team.length} Team Members
+          </Badge>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <KpiCards
+          title="Total Revenue"
+          value={`$${data.totalRevenue.toFixed(2)}`}
+          icon={<FiDollarSign className="text-blue-600" />}
+          trend="up"
+          trendValue="12.5%"
+        />
+        <KpiCards
+          title="Sales Pipeline"
+          value={`$${data.salesPipeline.toFixed(0)}`}
+          icon={<FiShoppingBag className="text-purple-600" />}
+          trend="up"
+          trendValue="8.2%"
+        />
+        <KpiCards
+          title="Win Rate"
+          value={`${data.winRate.toFixed(1)}%`}
+          icon={<FiTrendingUp className="text-green-600" />}
+          trend="up"
+          trendValue="4.3%"
+        />
+        <KpiCards
+          title="Team Members"
+          value={data.team.length.toString()}
+          icon={<FiUsers className="text-orange-600" />}
+          trend="up"
+          trendValue="2 new"
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="p-6 bg-white shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Revenue Trend</h3>
+          <div className="h-[250px]">
+            <RealTimeChart
+              type="line"
+              data={data.metrics
+                .filter((m: any) => m.category === 'revenue' || m.category === 'sales')
+                .map((m: any) => ({ name: m.name, value: m.value }))}
+              height={250}
+            />
+          </div>
+        </Card>
+        <Card className="p-6 bg-white shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Team Performance</h3>
+          <div className="h-[250px]">
+            <RealTimeChart
+              type="bar"
+              data={data.team.map((m: any) => ({ 
+                name: m.name, 
+                value: Math.floor(Math.random() * 100) + 50 
+              }))}
+              height={250}
+            />
+          </div>
+        </Card>
+      </div>
+
+      {/* Team & Activity Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="p-6 bg-white shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <FiUserCheck className="inline mr-2 text-blue-600" />
+            Team Members
+          </h3>
           <div className="space-y-3">
-            <Badge variant="outline" className="w-fit border-white/20 bg-white/10 px-3 py-1 text-white">
-              Seed-backed dashboard
-            </Badge>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Dashboard</h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300 md:text-base">
-                A seeded analytics snapshot with revenue, user, performance, and sales graphs.
-              </p>
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Source</p>
-              <p className="mt-1 text-sm font-semibold">{sourceLabel}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Metrics</p>
-              <p className="mt-1 text-sm font-semibold">{dashboard.totalMetrics} seeded points</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Value</p>
-              <p className="mt-1 text-sm font-semibold">{formatCurrency(totalValue)}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {kpiCards.map((card) => (
-          <KpiCards
-            key={card.title}
-            title={card.title}
-            value={card.value}
-            icon={card.icon}
-            trend={card.trend}
-            trendValue={card.trendValue}
-          />
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {renderCardFrame(
-          <div className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Metric Trend</h3>
-                <p className="text-sm text-slate-500">Seeded values over time.</p>
-              </div>
-              <FiTrendingUp className="text-xl text-blue-600" />
-            </div>
-            <div className="h-[320px]">
-              {dashboard.metricTrend.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={dashboard.metricTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                    <XAxis dataKey="name" tick={{ fill: '#64748B', fontSize: 12 }} />
-                    <YAxis tick={{ fill: '#64748B', fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#3B82F6"
-                      strokeWidth={3}
-                      dot={{ r: 4, fill: '#3B82F6' }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                renderNoData()
-              )}
-            </div>
-          </div>
-        )}
-
-        {renderCardFrame(
-          <div className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Category Breakdown</h3>
-                <p className="text-sm text-slate-500">Total value by category.</p>
-              </div>
-              <FiPieChart className="text-xl text-emerald-600" />
-            </div>
-            <div className="h-[320px]">
-              {dashboard.categoryCounts.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={dashboard.categoryCounts}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={78}
-                      outerRadius={118}
-                      paddingAngle={4}
-                      dataKey="value"
-                      nameKey="name"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {dashboard.categoryCounts.map((entry, index) => (
-                        <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                renderNoData()
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        {renderCardFrame(
-          <div className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Cumulative Growth</h3>
-                <p className="text-sm text-slate-500">Running total across the seeded dataset.</p>
-              </div>
-              <FiTrendingUp className="text-xl text-violet-600" />
-            </div>
-            <div className="h-[300px]">
-              {dashboard.cumulativeTrend.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dashboard.cumulativeTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.35} />
-                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                    <XAxis dataKey="name" tick={{ fill: '#64748B', fontSize: 12 }} />
-                    <YAxis tick={{ fill: '#64748B', fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#8B5CF6"
-                      fill="url(#cumulativeGradient)"
-                      strokeWidth={3}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                renderNoData()
-              )}
-            </div>
-          </div>,
-          'xl:col-span-2'
-        )}
-
-        <div className="space-y-6">
-          {renderCardFrame(
-            <div className="p-5">
-              <h3 className="mb-4 text-lg font-semibold text-slate-900">Top Metrics</h3>
-              <div className="space-y-3">
-                {dashboard.topMetrics.map((metric, index) => (
-                  <div
-                    key={`${metric.name}-${index}`}
-                    className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{metric.name}</p>
-                      <p className="text-xs text-slate-500">{metric.category}</p>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {metric.unit === '$'
-                        ? formatCurrency(metric.value)
-                        : `${metric.value.toLocaleString()}${metric.unit}`}
-                    </p>
+            {data.team.map((member: any, index: number) => (
+              <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center">
+                    {member.name.charAt(0)}
                   </div>
-                ))}
+                  <div>
+                    <p className="font-medium text-gray-900">{member.name}</p>
+                    <p className="text-sm text-gray-500">{member.role}</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {member.department || 'Sales'}
+                </Badge>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+        </Card>
 
-          {renderCardFrame(
-            <div className="p-5">
-              <h3 className="mb-4 text-lg font-semibold text-slate-900">Quick Stats</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between rounded-2xl bg-blue-50 px-4 py-3">
-                  <span className="text-sm text-slate-600">Category count</span>
-                  <span className="font-semibold text-slate-900">{dashboard.categoryTotals.length}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
-                  <span className="text-sm text-slate-600">Largest category share</span>
-                  <span className="font-semibold text-slate-900">
-                    {Math.round(largestCategoryShare * 100)}%
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-violet-50 px-4 py-3">
-                  <span className="text-sm text-slate-600">Timeline points</span>
-                  <span className="font-semibold text-slate-900">{dashboard.metricTrend.length}</span>
-                </div>
+        <Card className="p-6 bg-white shadow-lg">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <FiClock className="inline mr-2 text-gray-500" />
+            Recent Activity
+          </h3>
+          <div className="space-y-3">
+            {data.activities.slice(0, 6).map((activity: any, index: number) => (
+              <div key={index} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition">
+                <div className={`w-2 h-2 rounded-full ${
+                  activity.type === 'login' ? 'bg-green-500' :
+                  activity.type === 'view' ? 'bg-blue-500' :
+                  activity.type === 'create' ? 'bg-yellow-500' :
+                  'bg-purple-500'
+                }`} />
+                <span className="text-sm text-gray-600 flex-1">{activity.description}</span>
+                <span className="text-xs text-gray-400">
+                  {new Date(activity.createdAt).toLocaleTimeString()}
+                </span>
               </div>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        </Card>
       </div>
+
+      {/* Sales Records Table */}
+      <Card className="p-6 bg-white shadow-lg">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Sales</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 text-gray-500">Customer</th>
+                <th className="text-left py-2 text-gray-500">Product</th>
+                <th className="text-right py-2 text-gray-500">Amount</th>
+                <th className="text-left py-2 text-gray-500">Status</th>
+                <th className="text-left py-2 text-gray-500">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.salesRecords.slice(0, 5).map((record: any, index: number) => (
+                <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-2 font-medium">{record.customer}</td>
+                  <td className="py-2">{record.product}</td>
+                  <td className="py-2 text-right">${record.amount.toFixed(2)}</td>
+                  <td className="py-2">
+                    <Badge variant={
+                      record.status === 'completed' ? 'success' :
+                      record.status === 'pending' ? 'outline' : 'destructive'
+                    } className="text-xs">
+                      {record.status}
+                    </Badge>
+                  </td>
+                  <td className="py-2 text-gray-500 text-xs">
+                    {new Date(record.date).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

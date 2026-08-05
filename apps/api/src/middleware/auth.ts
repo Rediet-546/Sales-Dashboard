@@ -16,11 +16,16 @@ export async function auth(req: AuthRequest, res: Response, next: NextFunction) 
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
     const user = await UserModel.findById(decoded.id);
     
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Check if user is active (with fallback for old schema)
+    if (user.isActive === false) {
+      return res.status(403).json({ error: 'Account is deactivated' });
     }
 
     req.user = user;
@@ -38,9 +43,26 @@ export function requireRole(...roles: string[]) {
     }
     
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+      return res.status(403).json({ 
+        error: 'Insufficient permissions. Required roles: ' + roles.join(', ')
+      });
     }
     
     next();
   };
+}
+
+export function requireTeamAccess(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  const userId = req.params.userId || req.body.userId;
+  if (req.user.role === 'admin' || 
+      req.user.role === 'sales_manager' || 
+      userId === req.user.id) {
+    return next();
+  }
+  
+  res.status(403).json({ error: 'You can only access your own data' });
 }

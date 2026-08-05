@@ -17,24 +17,31 @@ model User {
   tenantId      String?
   refreshToken  String?
   lastLogin     DateTime?
+  team          String?   // Sales Team, Marketing Team, etc.
+  department    String?   // Sales, Marketing, Engineering, etc.
+  isActive      Boolean   @default(true)
+  phone         String?
+  avatar        String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   dashboards    Dashboard[]
   alerts        Alert[]
   metrics       Metric[]
-  reports       Report[]          // ✅ Has relation
+  reports       Report[]
   nlpQueries    NLPQuery[]
   whatIfScenarios WhatIfScenario[]
+  activities    Activity[]
+  salesRecords  SalesRecord[]
 }
 
 model Dashboard {
   id          String    @id @default(cuid())
   name        String
   description String?
-  tenantId    String?
+  type        String    @default("sales")
   isDefault   Boolean   @default(false)
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   metrics     Metric[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -51,9 +58,9 @@ model Metric {
   tenantId      String?
   date          DateTime  @default(now())
   dashboardId   String
-  dashboard     Dashboard @relation(fields: [dashboardId], references: [id])
+  dashboard     Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
   userId        String
-  user          User      @relation(fields: [userId], references: [id])
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   alerts        Alert[]
   metricData    MetricData[]
   createdAt     DateTime  @default(now())
@@ -83,9 +90,9 @@ model Alert {
   isActive      Boolean   @default(true)
   lastTriggered DateTime?
   metricId      String
-  metric        Metric    @relation(fields: [metricId], references: [id])
+  metric        Metric    @relation(fields: [metricId], references: [id], onDelete: Cascade)
   userId        String
-  user          User      @relation(fields: [userId], references: [id])
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -97,7 +104,7 @@ model Report {
   type        String
   data        Json
   userId      String
-  user        User      @relation(fields: [userId], references: [id]) // ✅ Added this!
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -118,8 +125,34 @@ model WhatIfScenario {
   name        String
   description String?
   change      Float
-  impact      String    // 'positive', 'negative', 'neutral'
+  impact      String
   confidence  Float     @default(0.0)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Activity {
+  id          String    @id @default(cuid())
+  action      String
+  description String
+  type        String
+  metadata    Json?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+}
+
+model SalesRecord {
+  id          String    @id @default(cuid())
+  amount      Float
+  currency    String    @default("USD")
+  status      String    @default("pending")
+  customer    String
+  product     String
+  quantity    Int       @default(1)
+  date        DateTime  @default(now())
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
