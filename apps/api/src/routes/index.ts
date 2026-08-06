@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import authRoutes from './authRoutes';
 import userRoutes from './userRoutes';
-import metricRoutes from './metricRoutes';
+import productRoutes from './productRoutes';
+import roleRoutes from './roleRoutes';
 import dashboardRoutes from './dashboardRoutes';
+import metricRoutes from './metricRoutes';
 import alertRoutes from './alertRoutes';
 import reportRoutes from './reportRoutes';
 import nlpRoutes from './nlpRoutes';
@@ -12,8 +14,10 @@ const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
-router.use('/metrics', metricRoutes);
+router.use('/products', productRoutes);
+router.use('/roles', roleRoutes);
 router.use('/dashboards', dashboardRoutes);
+router.use('/metrics', metricRoutes);
 router.use('/alerts', alertRoutes);
 router.use('/reports', reportRoutes);
 router.use('/nlp', nlpRoutes);

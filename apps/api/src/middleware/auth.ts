@@ -4,7 +4,7 @@ import { UserModel } from '../models/UserModel';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-interface AuthRequest extends Request {
+export interface AuthRequest extends Request {
   user?: any;
 }
 
@@ -23,8 +23,7 @@ export async function auth(req: AuthRequest, res: Response, next: NextFunction) 
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Check if user is active (with fallback for old schema)
-    if (user.isActive === false) {
+    if (!user.isActive) {
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
@@ -44,25 +43,11 @@ export function requireRole(...roles: string[]) {
     
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ 
-        error: 'Insufficient permissions. Required roles: ' + roles.join(', ')
+        error: `Insufficient permissions. Required roles: ${roles.join(', ')}`,
+        currentRole: req.user.role,
       });
     }
     
     next();
   };
-}
-
-export function requireTeamAccess(req: AuthRequest, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  
-  const userId = req.params.userId || req.body.userId;
-  if (req.user.role === 'admin' || 
-      req.user.role === 'sales_manager' || 
-      userId === req.user.id) {
-    return next();
-  }
-  
-  res.status(403).json({ error: 'You can only access your own data' });
 }
