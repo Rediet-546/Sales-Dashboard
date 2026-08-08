@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { PrismaClient, Role, SaleStatus } from '@prisma/client';
+import { PrismaClient, Role, SaleStatus, ApprovalStatus, ApprovalType, AlertType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -11,11 +11,15 @@ const prisma = new PrismaClient();
 
 function generateSKU(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = 'PRD-';
+  let result = 'SKU-';
   for (let i = 0; i < 8; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+function generateInvoice(): string {
+  return `INV-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 }
 
 function getRandomItem<T>(arr: T[]): T {
@@ -33,47 +37,60 @@ function getRandomDate(daysAgo: number): Date {
 // ============================================================
 
 const USERS = [
+  // SUPER_ADMIN
   {
-    email: 'superadmin@dashboard.com',
+    email: 'superadmin@shop.com',
     password: 'superadmin123',
     name: 'Super Admin',
-    role: 'SUPER_ADMIN' as Role,
+    role: Role.SUPER_ADMIN,
     team: 'Executive',
     department: 'Management',
     isActive: true,
   },
+  // ADMINS (Shop Owners)
   {
-    email: 'admin@dashboard.com',
+    email: 'admin1@shop.com',
     password: 'admin123',
-    name: 'Admin User',
-    role: 'ADMIN' as Role,
-    team: 'Executive',
-    department: 'Management',
+    name: 'John Admin',
+    role: Role.ADMIN,
+    team: 'Management',
+    department: 'Sales',
     isActive: true,
   },
   {
-    email: 'manager1@dashboard.com',
+    email: 'admin2@shop.com',
+    password: 'admin123',
+    name: 'Sarah Admin',
+    role: Role.ADMIN,
+    team: 'Management',
+    department: 'Retail',
+    isActive: true,
+  },
+  // MANAGERS
+  {
+    email: 'manager1@shop.com',
     password: 'manager123',
-    name: 'Sarah Johnson',
-    role: 'MANAGER' as Role,
+    name: 'Mike Manager',
+    role: Role.MANAGER,
     team: 'Sales Team A',
     department: 'Sales',
     isActive: true,
   },
   {
-    email: 'manager2@dashboard.com',
+    email: 'manager2@shop.com',
     password: 'manager123',
-    name: 'Mike Chen',
-    role: 'MANAGER' as Role,
+    name: 'Lisa Manager',
+    role: Role.MANAGER,
     team: 'Sales Team B',
-    department: 'Sales',
+    department: 'Retail',
     isActive: true,
   },
+  // USERS
   {
     email: 'john@example.com',
     password: 'john123',
     name: 'John Doe',
-    role: 'USER' as Role,
+    role: Role.USER,
     team: 'Sales Team A',
     department: 'Sales',
     isActive: true,
@@ -82,7 +99,7 @@ const USERS = [
     email: 'jane@example.com',
     password: 'jane123',
     name: 'Jane Smith',
-    role: 'USER' as Role,
+    role: Role.USER,
     team: 'Sales Team A',
     department: 'Sales',
     isActive: true,
@@ -91,270 +108,160 @@ const USERS = [
     email: 'mike@example.com',
     password: 'mike123',
     name: 'Mike Johnson',
-    role: 'USER' as Role,
+    role: Role.USER,
     team: 'Sales Team B',
-    department: 'Sales',
+    department: 'Retail',
     isActive: true,
   },
+  // VIEWER
   {
-    email: 'sarah@example.com',
-    password: 'sarah123',
-    name: 'Sarah Wilson',
-    role: 'VIEWER' as Role,
+    email: 'viewer@shop.com',
+    password: 'viewer123',
+    name: 'Sarah Viewer',
+    role: Role.VIEWER,
     team: 'Marketing',
     department: 'Marketing',
     isActive: true,
   },
+];
+
+const SHOPS = [
   {
-    email: 'chris@example.com',
-    password: 'chris123',
-    name: 'Chris Brown',
-    role: 'USER' as Role,
-    team: 'Sales Team B',
-    department: 'Sales',
-    isActive: true,
+    name: 'Main Store NYC',
+    description: 'Flagship store in New York City',
+    address: '123 Broadway, New York, NY 10001',
+    phone: '+1 212-555-0100',
+    email: 'nyc@shop.com',
+    currency: 'USD',
+    timezone: 'America/New_York',
   },
   {
-    email: 'lisa@example.com',
-    password: 'lisa123',
-    name: 'Lisa Taylor',
-    role: 'USER' as Role,
-    team: 'Sales Team B',
-    department: 'Sales',
-    isActive: true,
+    name: 'West Coast Store',
+    description: 'West coast branch in Los Angeles',
+    address: '456 Hollywood Blvd, Los Angeles, CA 90028',
+    phone: '+1 310-555-0200',
+    email: 'la@shop.com',
+    currency: 'USD',
+    timezone: 'America/Los_Angeles',
+  },
+  {
+    name: 'Online Store',
+    description: 'E-commerce online store',
+    address: '789 Digital Way, San Francisco, CA 94105',
+    phone: '+1 415-555-0300',
+    email: 'online@shop.com',
+    currency: 'USD',
+    timezone: 'America/Los_Angeles',
   },
 ];
 
 const PRODUCTS = [
   {
-    name: 'Enterprise License',
-    description: 'Full enterprise license with all features',
-    price: 12500.00,
-    cost: 8500.00,
-    category: 'Software',
+    name: 'Premium Laptop',
+    description: 'High-performance laptop with 16GB RAM',
+    price: 1299.99,
+    cost: 899.99,
+    category: 'Electronics',
     stock: 50,
     minStock: 10,
-    unit: 'license',
+    unit: 'pcs',
   },
   {
-    name: 'Pro Plan',
-    description: 'Professional plan for growing teams',
-    price: 8500.00,
-    cost: 5500.00,
-    category: 'Software',
+    name: 'Wireless Headphones',
+    description: 'Noise-canceling wireless headphones',
+    price: 199.99,
+    cost: 129.99,
+    category: 'Electronics',
     stock: 100,
     minStock: 20,
-    unit: 'subscription',
+    unit: 'pcs',
   },
   {
-    name: 'Premium Suite',
-    description: 'Complete premium software suite',
-    price: 25000.00,
-    cost: 18000.00,
-    category: 'Software',
-    stock: 30,
-    minStock: 5,
-    unit: 'suite',
-  },
-  {
-    name: 'Business Plan',
-    description: 'Business plan for mid-size companies',
-    price: 6200.00,
-    cost: 4200.00,
-    category: 'Software',
-    stock: 75,
-    minStock: 15,
-    unit: 'subscription',
-  },
-  {
-    name: 'Team Plan',
-    description: 'Team collaboration plan',
-    price: 4500.00,
-    cost: 3200.00,
-    category: 'Software',
-    stock: 120,
-    minStock: 25,
-    unit: 'subscription',
-  },
-  {
-    name: 'Basic Plan',
-    description: 'Basic plan for startups',
-    price: 3200.00,
-    cost: 2200.00,
-    category: 'Software',
+    name: 'Designer T-Shirt',
+    description: 'Premium cotton t-shirt',
+    price: 49.99,
+    cost: 29.99,
+    category: 'Clothing',
     stock: 200,
     minStock: 30,
-    unit: 'subscription',
+    unit: 'pcs',
   },
   {
-    name: 'Custom Solution',
-    description: 'Customized solution for specific needs',
-    price: 18000.00,
-    cost: 12000.00,
-    category: 'Custom',
-    stock: 20,
-    minStock: 3,
-    unit: 'solution',
+    name: 'Smartphone Pro',
+    description: 'Latest generation smartphone',
+    price: 899.99,
+    cost: 649.99,
+    category: 'Electronics',
+    stock: 75,
+    minStock: 15,
+    unit: 'pcs',
   },
   {
-    name: 'Integration Package',
-    description: 'Integration package with third-party tools',
-    price: 7500.00,
-    cost: 5200.00,
-    category: 'Integration',
-    stock: 40,
-    minStock: 8,
-    unit: 'package',
+    name: 'Office Chair',
+    description: 'Ergonomic office chair',
+    price: 349.99,
+    cost: 229.99,
+    category: 'Furniture',
+    stock: 30,
+    minStock: 5,
+    unit: 'pcs',
   },
   {
-    name: 'Consulting Services',
-    description: 'Professional consulting and implementation',
-    price: 15000.00,
-    cost: 9500.00,
-    category: 'Service',
-    stock: 15,
-    minStock: 2,
-    unit: 'service',
-  },
-  {
-    name: 'Training Package',
-    description: 'Comprehensive training for teams',
-    price: 3800.00,
-    cost: 2500.00,
-    category: 'Service',
+    name: 'Coffee Maker',
+    description: 'Automatic coffee maker',
+    price: 89.99,
+    cost: 59.99,
+    category: 'Appliances',
     stock: 60,
     minStock: 10,
-    unit: 'package',
+    unit: 'pcs',
+  },
+  {
+    name: 'Running Shoes',
+    description: 'Professional running shoes',
+    price: 129.99,
+    cost: 89.99,
+    category: 'Footwear',
+    stock: 80,
+    minStock: 15,
+    unit: 'pairs',
+  },
+  {
+    name: 'Backpack',
+    description: 'Waterproof laptop backpack',
+    price: 69.99,
+    cost: 45.99,
+    category: 'Accessories',
+    stock: 120,
+    minStock: 20,
+    unit: 'pcs',
+  },
+  {
+    name: 'Smart Watch',
+    description: 'Fitness smart watch',
+    price: 249.99,
+    cost: 169.99,
+    category: 'Electronics',
+    stock: 45,
+    minStock: 8,
+    unit: 'pcs',
+  },
+  {
+    name: 'Desk Lamp',
+    description: 'LED desk lamp with USB charging',
+    price: 39.99,
+    cost: 25.99,
+    category: 'Furniture',
+    stock: 90,
+    minStock: 15,
+    unit: 'pcs',
   },
 ];
 
 const CUSTOMERS = [
-  'Acme Corp', 'TechStart Inc', 'Global Enterprises', 'Corporate Solutions',
-  'HealthTech Inc', 'FinTech Corp', 'Cloud Solutions', 'Data Analytics Co',
-  'Global Logistics', 'Creative Agency', 'Digital Agency', 'E-commerce Co',
-  'BioTech Labs', 'AI Innovations', 'Blockchain Ventures', 'Quantum Computing',
-];
-
-const STATUSES: SaleStatus[] = ['COMPLETED', 'PENDING', 'COMPLETED', 'COMPLETED', 'PENDING', 'CANCELLED'];
-
-const METRICS = [
-  { name: 'Total Revenue', value: 542760.00, unit: '$', category: 'revenue' },
-  { name: 'Monthly Revenue', value: 45230.00, unit: '$', category: 'revenue' },
-  { name: 'Revenue Growth', value: 12.5, unit: '%', category: 'revenue' },
-  { name: 'Average Deal Size', value: 8500.00, unit: '$', category: 'revenue' },
-  { name: 'Customer Lifetime Value', value: 1240.50, unit: '$', category: 'revenue' },
-  { name: 'Q1 Sales', value: 125000.00, unit: '$', category: 'sales' },
-  { name: 'Q2 Sales', value: 145000.00, unit: '$', category: 'sales' },
-  { name: 'Q3 Sales', value: 162000.00, unit: '$', category: 'sales' },
-  { name: 'Q4 Sales', value: 189000.00, unit: '$', category: 'sales' },
-  { name: 'Year-over-Year Growth', value: 18.5, unit: '%', category: 'sales' },
-  { name: 'Sales Pipeline Value', value: 450000.00, unit: '$', category: 'sales' },
-  { name: 'Win Rate', value: 42.5, unit: '%', category: 'sales' },
-  { name: 'Active Users', value: 1247, unit: '', category: 'users' },
-  { name: 'New Signups', value: 89, unit: '', category: 'users' },
-  { name: 'Website Traffic', value: 4523, unit: '', category: 'users' },
-  { name: 'Team Members', value: 10, unit: '', category: 'users' },
-  { name: 'Conversion Rate', value: 3.87, unit: '%', category: 'performance' },
-  { name: 'Customer Satisfaction', value: 4.8, unit: '/5', category: 'performance' },
-  { name: 'Sales Target Achievement', value: 94.5, unit: '%', category: 'performance' },
-  { name: 'Team Performance', value: 87.3, unit: '%', category: 'performance' },
-  { name: 'Campaign ROI', value: 245.0, unit: '%', category: 'marketing' },
-  { name: 'Cost Per Acquisition', value: 45.50, unit: '$', category: 'marketing' },
-  { name: 'Lead Conversion', value: 234, unit: '', category: 'marketing' },
-  { name: 'Marketing Spend', value: 12500.00, unit: '$', category: 'marketing' },
-];
-
-const ALERTS = [
-  { name: 'Revenue Target Alert', condition: 'greater_than', threshold: 50000 },
-  { name: 'Sales Pipeline Alert', condition: 'less_than', threshold: 300000 },
-  { name: 'Win Rate Alert', condition: 'less_than', threshold: 35 },
-  { name: 'Monthly Sales Target', condition: 'greater_than', threshold: 100000 },
-  { name: 'User Growth Alert', condition: 'greater_than', threshold: 1000 },
-  { name: 'Conversion Rate Alert', condition: 'less_than', threshold: 3.0 },
-  { name: 'Revenue Drop Alert', condition: 'less_than', threshold: 40000 },
-  { name: 'Low Stock Alert', condition: 'less_than', threshold: 10 },
-];
-
-const REPORTS = [
-  { name: 'Monthly Sales Report', type: 'summary' },
-  { name: 'Revenue Analytics Report', type: 'analytics' },
-  { name: 'Sales Forecast Report', type: 'forecast' },
-  { name: 'Team Performance Report', type: 'detailed' },
-  { name: 'Product Performance Report', type: 'analytics' },
-  { name: 'Quarterly Business Review', type: 'summary' },
-];
-
-const REPORT_INSIGHTS = [
-  'Revenue increased by 15% this month to $542,760',
-  'User engagement is up 8% with 1,247 active users',
-  'Conversion rate improved by 2.5% to 3.87%',
-  'Customer satisfaction at all-time high of 4.8/5',
-  'Marketing ROI increased by 12% to 245%',
-  'Sales pipeline is strong at $450,000 this quarter',
-  'Team performance at 87.3% of target',
-  'Q4 sales reached $189,000, up 18.5% year-over-year',
-  'Average deal size is $8,500, up 10% from last quarter',
-  'Customer lifetime value is $1,240.50, showing strong retention',
-  'New product launch generated $45,000 in first month',
-  'Customer acquisition cost decreased by 8%',
-];
-
-const NLP_QUERIES = [
-  {
-    query: 'Show me revenue trends for last month',
-    response: 'Revenue increased by 12.5% last month, reaching $45,230. The growth was driven by a 15% increase in average order value and 8% increase in new customers.',
-    confidence: 0.92,
-  },
-  {
-    query: 'What is our total revenue?',
-    response: 'Total revenue is $542,760 annually. Monthly revenue is $45,230 with an average deal size of $8,500.',
-    confidence: 0.95,
-  },
-  {
-    query: 'Analyze sales performance',
-    response: 'Sales are up 18.5% year-over-year. Q4 sales reached $189,000 with a win rate of 42.5%. Pipeline value is $450,000.',
-    confidence: 0.88,
-  },
-  {
-    query: 'What are our top metrics?',
-    response: 'Top metrics: Total Revenue ($542,760), Active Users (1,247), Win Rate (42.5%), and Customer Satisfaction (4.8/5).',
-    confidence: 0.90,
-  },
-  {
-    query: 'Show me low stock products',
-    response: 'You have 5 products with low stock. Enterprise License (10 left), Pro Plan (20 left), Custom Solution (3 left).',
-    confidence: 0.85,
-  },
-];
-
-const WHAT_IF_SCENARIOS = [
-  { name: 'Optimistic Growth', description: '20% growth across all metrics', change: 20, impact: 'positive', confidence: 0.75 },
-  { name: 'Moderate Growth', description: '10% growth scenario', change: 10, impact: 'positive', confidence: 0.85 },
-  { name: 'Pessimistic Scenario', description: '10% decline scenario', change: -10, impact: 'negative', confidence: 0.70 },
-  { name: 'Aggressive Marketing', description: '50% marketing spend increase', change: 15, impact: 'positive', confidence: 0.65 },
-  { name: 'Cost Optimization', description: '15% cost reduction', change: 5, impact: 'positive', confidence: 0.80 },
-  { name: 'Market Expansion', description: 'Entering 3 new markets', change: 25, impact: 'positive', confidence: 0.60 },
-];
-
-const ACTIVITIES = [
-  { action: 'login', description: 'User logged in to dashboard', type: 'login' },
-  { action: 'view', description: 'Viewed sales dashboard', type: 'view' },
-  { action: 'create', description: 'Created new sales report', type: 'create' },
-  { action: 'export', description: 'Exported sales data to PDF', type: 'export' },
-  { action: 'view', description: 'Analyzed revenue trends', type: 'view' },
-  { action: 'create', description: 'Set up new alert for revenue threshold', type: 'create' },
-  { action: 'view', description: 'Reviewed team performance', type: 'view' },
-  { action: 'export', description: 'Exported monthly report', type: 'export' },
-  { action: 'create', description: 'Registered new product', type: 'product' },
-  { action: 'update', description: 'Updated product inventory', type: 'product' },
-];
-
-const DASHBOARD_NAMES = [
-  'Sales Dashboard',
-  'Marketing Dashboard',
-  'Executive Dashboard',
-  'Operations Dashboard',
-  'Analytics Dashboard',
+  'James Wilson', 'Maria Garcia', 'David Chen', 'Linda Johnson',
+  'Robert Taylor', 'Patricia Lee', 'Michael Brown', 'Jennifer Davis',
+  'William Miller', 'Barbara Jones', 'Thomas Wilson', 'Jessica Martinez',
 ];
 
 // ============================================================
@@ -391,37 +298,121 @@ async function seedUsers() {
     }
   }
 
-  // Assign managers
-  const managers = createdUsers.filter((u: any) => u.role === 'MANAGER');
-  const teamA = createdUsers.filter((u: any) => u.team === 'Sales Team A' && u.role === 'USER');
-  const teamB = createdUsers.filter((u: any) => u.team === 'Sales Team B' && u.role === 'USER');
-
-  if (managers.length >= 2) {
-    for (const user of teamA) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { managerId: managers[0].id },
-      });
-    }
-    for (const user of teamB) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { managerId: managers[1].id },
-      });
-    }
-    console.log('✅ Assigned managers to teams');
-  }
-
   return createdUsers;
 }
 
-async function seedProducts(users: any[]) {
+async function seedShops(users: any[]) {
+  console.log('🏪 Seeding shops...');
+  const createdShops: any[] = [];
+  const admins = users.filter((u: any) => u.role === Role.ADMIN);
+
+  for (let i = 0; i < SHOPS.length; i++) {
+    const shopData = SHOPS[i];
+    const admin = admins[i % admins.length];
+
+    const existing = await prisma.shop.findFirst({
+      where: { name: shopData.name },
+    });
+
+    if (!existing) {
+      const shop = await prisma.shop.create({
+        data: {
+          ...shopData,
+          settings: {
+            create: {
+              taxRate: 8.0,
+              invoicePrefix: `INV-${String(i + 1).padStart(3, '0')}-`,
+              lowStockThreshold: 10,
+            },
+          },
+        },
+      });
+
+      // Assign admin to shop
+      await prisma.user.update({
+        where: { id: admin.id },
+        data: { shopId: shop.id },
+      });
+
+      createdShops.push(shop);
+      console.log(`✅ Created shop: ${shop.name} with admin ${admin.name}`);
+    } else {
+      createdShops.push(existing);
+      console.log(`⚠️ Shop ${shopData.name} already exists`);
+    }
+  }
+
+  return createdShops;
+}
+
+async function seedManagerPermissions(users: any[]) {
+  console.log('🔑 Seeding manager permissions...');
+  const managers = users.filter((u: any) => u.role === Role.MANAGER);
+
+  const permissionConfigs = [
+    {
+      canManageProducts: true,
+      canCreateProducts: true,
+      canEditPricing: false,
+      canViewReports: true,
+      canManageTeam: true,
+      canProcessReturns: true,
+      department: 'Sales',
+      categories: ['Electronics', 'Accessories'],
+      maxDiscount: 10.0,
+      approvalRequired: true,
+    },
+    {
+      canManageProducts: true,
+      canCreateProducts: true,
+      canEditPricing: false,
+      canViewReports: true,
+      canManageTeam: false,
+      canProcessReturns: true,
+      department: 'Retail',
+      categories: ['Clothing', 'Footwear'],
+      maxDiscount: 15.0,
+      approvalRequired: true,
+    },
+  ];
+
+  for (let i = 0; i < managers.length; i++) {
+    const manager = managers[i];
+    const config = permissionConfigs[i % permissionConfigs.length];
+
+    const existing = await prisma.managerPermission.findFirst({
+      where: { managerId: manager.id },
+    });
+
+    if (!existing) {
+      const permission = await prisma.managerPermission.create({
+        data: {
+          managerId: manager.id,
+          ...config,
+          categories: config.categories,
+        },
+      });
+
+      await prisma.user.update({
+        where: { id: manager.id },
+        data: { permissionsId: permission.id },
+      });
+
+      console.log(`✅ Created permissions for ${manager.name}`);
+    }
+  }
+
+  return true;
+}
+
+async function seedProducts(users: any[], shops: any[]) {
   console.log('📦 Seeding products...');
   let productCount = 0;
-  const managers = users.filter((u: any) => u.role === 'MANAGER' || u.role === 'ADMIN');
+  const managers = users.filter((u: any) => u.role === Role.MANAGER || u.role === Role.ADMIN);
 
   for (const productData of PRODUCTS) {
     const user = getRandomItem(managers);
+    const shop = getRandomItem(shops);
     const sku = generateSKU();
 
     const existing = await prisma.product.findFirst({
@@ -433,8 +424,9 @@ async function seedProducts(users: any[]) {
         data: {
           ...productData,
           sku,
+          shopId: shop.id,
           userId: user.id,
-          images: [`/images/products/${sku.toLowerCase()}.jpg`],
+          barcode: `BAR-${sku}`,
         },
       });
       productCount++;
@@ -445,28 +437,40 @@ async function seedProducts(users: any[]) {
   return productCount;
 }
 
-async function seedSalesRecords(users: any[]) {
+async function seedSalesRecords(users: any[], shops: any[]) {
   console.log('💰 Seeding sales records...');
   let recordCount = 0;
-  const salesReps = users.filter((u: any) => u.role === 'USER' || u.role === 'MANAGER');
+  const salesUsers = users.filter((u: any) => u.role === Role.USER || u.role === Role.MANAGER);
   const products = await prisma.product.findMany();
 
   for (let i = 0; i < 50; i++) {
-    const user = getRandomItem(salesReps);
+    const user = getRandomItem(salesUsers);
+    const shop = getRandomItem(shops);
     const product = getRandomItem(products);
     const quantity = Math.floor(Math.random() * 5) + 1;
-    const amount = product.price * quantity;
+    const discount = Math.random() > 0.5 ? Math.floor(Math.random() * 10) : 0;
+    const tax = 8.0;
+    const subtotal = product.price * quantity;
+    const discountAmount = (subtotal * discount) / 100;
+    const taxAmount = ((subtotal - discountAmount) * tax) / 100;
+    const total = subtotal - discountAmount + taxAmount;
 
     await prisma.salesRecord.create({
       data: {
-        amount,
+        invoice: generateInvoice(),
+        amount: subtotal,
+        discount: discountAmount,
+        tax: taxAmount,
+        total: total,
+        status: getRandomItem([SaleStatus.COMPLETED, SaleStatus.COMPLETED, SaleStatus.PENDING]),
+        paymentMethod: getRandomItem(['CASH', 'CARD', 'MOBILE', 'BANK_TRANSFER']),
         customer: getRandomItem(CUSTOMERS),
         productId: product.id,
         quantity,
-        status: getRandomItem(STATUSES),
-        date: getRandomDate(90),
+        shopId: shop.id,
         userId: user.id,
-        notes: `Sale #${i + 1} - ${product.name}`,
+        date: getRandomDate(60),
+        notes: `Sale #${i + 1}`,
       },
     });
     recordCount++;
@@ -476,230 +480,79 @@ async function seedSalesRecords(users: any[]) {
   return recordCount;
 }
 
-async function seedDashboards(users: any[]) {
-  console.log('📊 Seeding dashboards...');
-  const createdDashboards: any[] = [];
-
-  for (const name of DASHBOARD_NAMES) {
-    const user = getRandomItem(users);
-    const existing = await prisma.dashboard.findFirst({
-      where: { name, userId: user.id },
-    });
-
-    if (!existing) {
-      const dashboard = await prisma.dashboard.create({
-        data: {
-          name,
-          description: `${name} for ${user.name}`,
-          userId: user.id,
-          type: 'sales',
-        },
-      });
-      createdDashboards.push(dashboard);
-    }
-  }
-
-  console.log(`✅ Created ${createdDashboards.length} dashboards`);
-  return createdDashboards;
-}
-
-async function seedMetrics(dashboards: any[]) {
-  console.log('📈 Seeding metrics...');
-  let metricCount = 0;
-
-  for (const dashboard of dashboards) {
-    for (const metricData of METRICS) {
-      const existing = await prisma.metric.findFirst({
-        where: {
-          name: metricData.name,
-          dashboardId: dashboard.id,
-        },
-      });
-
-      if (!existing) {
-        const variation = 0.85 + Math.random() * 0.3;
-        await prisma.metric.create({
-          data: {
-            ...metricData,
-            value: Math.round(metricData.value * variation * 100) / 100,
-            dashboardId: dashboard.id,
-            userId: dashboard.userId,
-            date: getRandomDate(30),
-          },
-        });
-        metricCount++;
-      }
-    }
-  }
-
-  console.log(`✅ Created ${metricCount} metrics`);
-  return metricCount;
-}
-
-async function seedMetricData(metrics: any[]) {
-  console.log('📉 Seeding metric data...');
-  let dataCount = 0;
-
-  const revenueMetric = metrics.find((m: any) => m.name === 'Monthly Revenue');
-  if (!revenueMetric) return 0;
-
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const factor = 0.7 + Math.random() * 0.6;
-    const value = Math.round(45230 * factor * 100) / 100;
-
-    await prisma.metricData.create({
-      data: {
-        metricId: revenueMetric.id,
-        value,
-        timestamp: date,
-        metadata: { source: 'generated' },
-      },
-    });
-    dataCount++;
-  }
-
-  console.log(`✅ Created ${dataCount} metric data points`);
-  return dataCount;
-}
-
-async function seedAlerts(users: any[]) {
+async function seedAlerts(users: any[], shops: any[]) {
   console.log('🔔 Seeding alerts...');
   let alertCount = 0;
-  const metrics = await prisma.metric.findMany({ take: 20 });
 
-  for (const alertData of ALERTS) {
-    const metric = getRandomItem(metrics);
-    if (!metric) continue;
+  const alertData = [
+    { name: 'Low Stock Alert', type: AlertType.STOCK, condition: 'less_than', threshold: 10 },
+    { name: 'Sales Target Alert', type: AlertType.SALES, condition: 'greater_than', threshold: 5000 },
+    { name: 'User Activity Alert', type: AlertType.USER_ACTION, condition: 'greater_than', threshold: 100 },
+    { name: 'Revenue Drop Alert', type: AlertType.SALES, condition: 'less_than', threshold: 1000 },
+    { name: 'Inventory Warning', type: AlertType.STOCK, condition: 'less_than', threshold: 20 },
+  ];
 
-    const existing = await prisma.alert.findFirst({
-      where: { name: alertData.name, metricId: metric.id },
+  for (const alert of alertData) {
+    const user = getRandomItem(users);
+    const shop = getRandomItem(shops);
+
+    await prisma.alert.create({
+      data: {
+        name: alert.name,
+        type: alert.type,
+        condition: alert.condition,
+        threshold: alert.threshold,
+        status: 'active',
+        isActive: true,
+        userId: user.id,
+        shopId: shop.id,
+        message: `Alert: ${alert.name} triggered!`,
+      },
     });
-
-    if (!existing) {
-      await prisma.alert.create({
-        data: {
-          ...alertData,
-          threshold: metric.value * (0.5 + Math.random() * 0.5),
-          status: ['active', 'active', 'active', 'inactive'][alertCount % 4],
-          metricId: metric.id,
-          userId: metric.userId,
-        },
-      });
-      alertCount++;
-    }
+    alertCount++;
   }
 
   console.log(`✅ Created ${alertCount} alerts`);
   return alertCount;
 }
 
-async function seedReports(users: any[], dashboards: any[]) {
+async function seedReports(users: any[], shops: any[]) {
   console.log('📄 Seeding reports...');
   let reportCount = 0;
 
-  for (const reportData of REPORTS) {
+  const reportTypes = ['summary', 'analytics', 'forecast', 'detailed'];
+
+  for (let i = 0; i < 6; i++) {
     const user = getRandomItem(users);
-    const dashboard = getRandomItem(dashboards);
-    const existing = await prisma.report.findFirst({
-      where: { name: reportData.name, userId: user.id },
-    });
+    const shop = getRandomItem(shops);
 
-    if (!existing) {
-      const insights = [...REPORT_INSIGHTS]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 4);
-
-      await prisma.report.create({
+    await prisma.report.create({
+      data: {
+        name: `Report ${i + 1}`,
+        description: `${reportTypes[i % reportTypes.length]} report`,
+        type: reportTypes[i % reportTypes.length],
         data: {
-          name: reportData.name,
-          description: `${reportData.type} report for ${dashboard.name}`,
-          type: reportData.type,
-          data: {
-            dashboard: dashboard.name,
-            generated: new Date().toISOString(),
-            summary: `This is a ${reportData.type} report for ${dashboard.name}`,
-            insights,
+          generated: new Date().toISOString(),
+          metrics: {
+            totalSales: Math.floor(Math.random() * 10000),
+            totalOrders: Math.floor(Math.random() * 100),
+            averageOrder: Math.floor(Math.random() * 500) + 100,
           },
-          userId: user.id,
+          insights: [
+            'Revenue increased by 15% this month',
+            'Customer satisfaction at 4.8/5',
+            'Top product: Premium Laptop',
+          ],
         },
-      });
-      reportCount++;
-    }
+        userId: user.id,
+        shopId: shop.id,
+      },
+    });
+    reportCount++;
   }
 
   console.log(`✅ Created ${reportCount} reports`);
   return reportCount;
-}
-
-async function seedNLPQueries(users: any[]) {
-  console.log('🧠 Seeding NLP queries...');
-  let nlpCount = 0;
-
-  for (const queryData of NLP_QUERIES) {
-    const user = getRandomItem(users);
-    const existing = await prisma.nLPQuery.findFirst({
-      where: { query: queryData.query, userId: user.id },
-    });
-
-    if (!existing) {
-      await prisma.nLPQuery.create({
-        data: { ...queryData, userId: user.id },
-      });
-      nlpCount++;
-    }
-  }
-
-  console.log(`✅ Created ${nlpCount} NLP queries`);
-  return nlpCount;
-}
-
-async function seedWhatIfScenarios(users: any[]) {
-  console.log('📊 Seeding What-If scenarios...');
-  let scenarioCount = 0;
-
-  for (const scenarioData of WHAT_IF_SCENARIOS) {
-    const user = getRandomItem(users);
-    const existing = await prisma.whatIfScenario.findFirst({
-      where: { name: scenarioData.name, userId: user.id },
-    });
-
-    if (!existing) {
-      await prisma.whatIfScenario.create({
-        data: { ...scenarioData, userId: user.id },
-      });
-      scenarioCount++;
-    }
-  }
-
-  console.log(`✅ Created ${scenarioCount} What-If scenarios`);
-  return scenarioCount;
-}
-
-async function seedActivities(users: any[]) {
-  console.log('📝 Seeding activities...');
-  let activityCount = 0;
-
-  for (const activityData of ACTIVITIES) {
-    const user = getRandomItem(users);
-    const date = getRandomDate(7);
-
-    await prisma.activity.create({
-      data: {
-        action: activityData.action,
-        description: activityData.description,
-        type: activityData.type,
-        userId: user.id,
-        metadata: { timestamp: date.toISOString() },
-        createdAt: date,
-      },
-    });
-    activityCount++;
-  }
-
-  console.log(`✅ Created ${activityCount} activities`);
-  return activityCount;
 }
 
 // ============================================================
@@ -709,43 +562,30 @@ async function seedActivities(users: any[]) {
 async function main() {
   console.log('🌱 Starting database seeding...\n');
   console.log('===========================================');
-  console.log('  SALES MANAGEMENT SYSTEM SEEDING');
+  console.log('  SHOP MANAGEMENT SYSTEM SEEDING');
   console.log('===========================================\n');
 
   try {
     // 1. Users
     const users = await seedUsers();
 
-    // 2. Products
-    const productCount = await seedProducts(users);
+    // 2. Shops
+    const shops = await seedShops(users);
 
-    // 3. Sales Records
-    const salesCount = await seedSalesRecords(users);
+    // 3. Manager Permissions
+    await seedManagerPermissions(users);
 
-    // 4. Dashboards
-    const dashboards = await seedDashboards(users);
+    // 4. Products
+    const productCount = await seedProducts(users, shops);
 
-    // 5. Metrics
-    const metricCount = await seedMetrics(dashboards);
+    // 5. Sales Records
+    const salesCount = await seedSalesRecords(users, shops);
 
-    // 6. Metric Data (for graphs)
-    const metrics = await prisma.metric.findMany();
-    const metricDataCount = await seedMetricData(metrics);
+    // 6. Alerts
+    const alertCount = await seedAlerts(users, shops);
 
-    // 7. Alerts
-    const alertCount = await seedAlerts(users);
-
-    // 8. Reports
-    const reportCount = await seedReports(users, dashboards);
-
-    // 9. NLP Queries
-    const nlpCount = await seedNLPQueries(users);
-
-    // 10. What-If Scenarios
-    const scenarioCount = await seedWhatIfScenarios(users);
-
-    // 11. Activities
-    const activityCount = await seedActivities(users);
+    // 7. Reports
+    const reportCount = await seedReports(users, shops);
 
     // Summary
     console.log('\n===========================================');
@@ -753,32 +593,27 @@ async function main() {
     console.log('===========================================');
     console.log(`\n📊 SEED SUMMARY:`);
     console.log(`   👤 Users: ${users.length}`);
+    console.log(`   🏪 Shops: ${shops.length}`);
     console.log(`   📦 Products: ${productCount}`);
     console.log(`   💰 Sales Records: ${salesCount}`);
-    console.log(`   📊 Dashboards: ${dashboards.length}`);
-    console.log(`   📈 Metrics: ${metricCount}`);
-    console.log(`   📉 Metric Data Points: ${metricDataCount}`);
     console.log(`   🔔 Alerts: ${alertCount}`);
     console.log(`   📄 Reports: ${reportCount}`);
-    console.log(`   🧠 NLP Queries: ${nlpCount}`);
-    console.log(`   📊 Scenarios: ${scenarioCount}`);
-    console.log(`   📝 Activities: ${activityCount}`);
 
     console.log('\n📋 TEST CREDENTIALS:');
     console.log('-------------------');
-    console.log('🔴 Super Admin: superadmin@dashboard.com / superadmin123');
-    console.log('🟠 Admin: admin@dashboard.com / admin123');
-    console.log('🟢 Manager 1: manager1@dashboard.com / manager123');
-    console.log('🟢 Manager 2: manager2@dashboard.com / manager123');
+    console.log('🔴 Super Admin: superadmin@shop.com / superadmin123');
+    console.log('🟠 Admin 1: admin1@shop.com / admin123');
+    console.log('🟠 Admin 2: admin2@shop.com / admin123');
+    console.log('🟢 Manager 1: manager1@shop.com / manager123');
+    console.log('🟢 Manager 2: manager2@shop.com / manager123');
     console.log('🔵 User: john@example.com / john123');
-    console.log('🔵 User: jane@example.com / jane123');
-    console.log('👁️ Viewer: sarah@example.com / sarah123');
+    console.log('👁️ Viewer: viewer@shop.com / viewer123');
 
     console.log('\n📌 ROLE PERMISSIONS:');
-    console.log('   🔴 SUPER_ADMIN: Full access, can assign managers, change roles');
-    console.log('   🟠 ADMIN: Full access except role changes');
-    console.log('   🟢 MANAGER: Can register products, manage team');
-    console.log('   🔵 USER: View dashboard, analytics, reports');
+    console.log('   🔴 SUPER_ADMIN: Full system access');
+    console.log('   🟠 ADMIN: Shop management, manager assignment');
+    console.log('   🟢 MANAGER: Limited permissions with approval workflow');
+    console.log('   🔵 USER: Basic sales operations');
     console.log('   👁️ VIEWER: Read-only access');
 
   } catch (error) {

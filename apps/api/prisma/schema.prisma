@@ -8,7 +8,47 @@ datasource db {
 }
 
 // ============================================
-// USER & ROLES
+// ENUMS
+// ============================================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  USER
+  VIEWER
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalType {
+  PRICE_CHANGE
+  DELETE_PRODUCT
+  RETURN_REFUND
+  STOCK_UPDATE
+  PERMISSION_CHANGE
+}
+
+enum AlertType {
+  STOCK
+  SALES
+  USER_ACTION
+  SYSTEM
+}
+
+// ============================================
+// USER & AUTH
 // ============================================
 
 model User {
@@ -23,8 +63,19 @@ model User {
   phone         String?
   avatar        String?
   lastLogin     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  
+  // Shop/Store relation
+  shopId        String?
+  shop          Shop?     @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  
+  // Manager - Subordinate relationship
+  managerId     String?
+  manager       User?     @relation("UserManager", fields: [managerId], references: [id])
+  subordinates  User[]    @relation("UserManager")
+  
+  // Manager Permissions (for MANAGER role)
+  permissions   ManagerPermission? @relation(fields: [permissionsId], references: [id])
+  permissionsId String?   @unique
   
   // Relations
   products      Product[]
@@ -37,18 +88,104 @@ model User {
   nlpQueries    NLPQuery[]
   whatIfScenarios WhatIfScenario[]
   
-  // Manager - Subordinate relationship
-  managerId     String?
-  manager       User?     @relation("UserManager", fields: [managerId], references: [id])
-  subordinates  User[]    @relation("UserManager")
+  // Approval Requests (as manager)
+  managerRequests ApprovalRequest[] @relation("ManagerRequests")
+  // Approval Requests (as admin)
+  adminApprovals  ApprovalRequest[] @relation("AdminApprovals")
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  MANAGER
-  USER
-  VIEWER
+// ============================================
+// SHOPS & STORES
+// ============================================
+
+model Shop {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  address     String?
+  phone       String?
+  email       String?
+  currency    String    @default("USD")
+  timezone    String    @default("UTC")
+  isActive    Boolean   @default(true)
+  logo        String?
+  
+  // Relations
+  users       User[]
+  settings    ShopSettings?
+  products    Product[]
+  salesRecords SalesRecord[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ShopSettings {
+  id                String   @id @default(cuid())
+  shopId            String   @unique
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  taxRate           Float    @default(0)
+  invoicePrefix     String   @default("INV-")
+  receiptFooter     String?
+  theme             String   @default("light")
+  lowStockThreshold Int      @default(5)
+  dateFormat        String   @default("MM/DD/YYYY")
+  timeFormat        String   @default("12h")
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ============================================
+// MANAGER PERMISSIONS
+// ============================================
+
+model ManagerPermission {
+  id                String   @id @default(cuid())
+  managerId         String   @unique
+  manager           User     @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  
+  // Permissions
+  canManageProducts Boolean  @default(false)
+  canCreateProducts Boolean  @default(false)
+  canEditPricing    Boolean  @default(false)
+  canViewReports    Boolean  @default(false)
+  canManageTeam     Boolean  @default(false)
+  canProcessReturns Boolean  @default(false)
+  
+  // Restrictions
+  department        String?
+  categories        String[] // Assigned categories
+  maxDiscount       Float?   // Maximum discount percentage allowed
+  approvalRequired  Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ============================================
+// APPROVAL REQUESTS
+// ============================================
+
+model ApprovalRequest {
+  id          String         @id @default(cuid())
+  type        ApprovalType
+  status      ApprovalStatus @default(PENDING)
+  requestData Json
+  reason      String?
+  
+  managerId   String
+  manager     User           @relation("ManagerRequests", fields: [managerId], references: [id])
+  
+  adminId     String
+  admin       User           @relation("AdminApprovals", fields: [adminId], references: [id])
+  
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  resolvedAt  DateTime?
 }
 
 // ============================================
@@ -65,15 +202,23 @@ model Product {
   category    String
   stock       Int       @default(0)
   minStock    Int       @default(5)
+  maxStock    Int?
   unit        String    @default("pcs")
   images      Json?
   isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  barcode     String?
+  qrCode      String?
+  
+  shopId      String?
+  shop        Shop?     @relation(fields: [shopId], references: [id], onDelete: SetNull)
   
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   salesRecords SalesRecord[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // ============================================
@@ -81,28 +226,33 @@ model Product {
 // ============================================
 
 model SalesRecord {
-  id          String    @id @default(cuid())
+  id          String      @id @default(cuid())
+  invoice     String      @unique
   amount      Float
-  currency    String    @default("USD")
-  status      SaleStatus @default(PENDING)
-  customer    String
-  productId   String?
-  product     Product?  @relation(fields: [productId], references: [id])
-  quantity    Int       @default(1)
-  date        DateTime  @default(now())
+  discount    Float       @default(0)
+  tax         Float       @default(0)
+  total       Float
+  currency    String      @default("USD")
+  status      SaleStatus  @default(PENDING)
+  paymentMethod String    @default("CASH")
+  customer    String?
+  customerEmail String?
+  customerPhone String?
   notes       String?
   
+  productId   String?
+  product     Product?    @relation(fields: [productId], references: [id])
+  quantity    Int         @default(1)
+  
+  shopId      String?
+  shop        Shop?       @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  
   userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
-enum SaleStatus {
-  PENDING
-  COMPLETED
-  CANCELLED
-  REFUNDED
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  date        DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
 // ============================================
@@ -161,15 +311,23 @@ model MetricData {
 model Alert {
   id            String    @id @default(cuid())
   name          String
+  type          AlertType @default(STOCK)
   condition     String
   threshold     Float
   status        String    @default("active")
   isActive      Boolean   @default(true)
   lastTriggered DateTime?
-  metricId      String
-  metric        Metric    @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  message       String?
+  
+  metricId      String?
+  metric        Metric?   @relation(fields: [metricId], references: [id], onDelete: SetNull)
+  
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  shopId        String?
+  department    String?   // For manager-specific alerts
+  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -184,14 +342,20 @@ model Report {
   description String?
   type        String
   data        Json
+  filters     Json?
+  
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  shopId      String?
+  department  String?
+  
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
 
 // ============================================
-// ACTIVITIES
+// ACTIVITY LOGS
 // ============================================
 
 model Activity {
@@ -200,8 +364,14 @@ model Activity {
   description String
   type        String
   metadata    Json?
+  
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  shopId      String?
+  ipAddress   String?
+  userAgent   String?
+  
   createdAt   DateTime  @default(now())
 }
 
