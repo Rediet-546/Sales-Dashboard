@@ -393,11 +393,6 @@ async function seedManagerPermissions(users: any[]) {
         },
       });
 
-      await prisma.user.update({
-        where: { id: manager.id },
-        data: { permissionsId: permission.id },
-      });
-
       console.log(`✅ Created permissions for ${manager.name}`);
     }
   }
